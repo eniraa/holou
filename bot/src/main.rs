@@ -3,6 +3,7 @@ mod utils;
 
 use std::sync::Arc;
 
+use chrono::prelude::*;
 use poise::serenity_prelude as serenity;
 
 use crate::commands::*;
@@ -36,6 +37,7 @@ async fn main() {
     {
         let mut data = client.data.write().await;
         data.insert::<ShardManagerContainer>(Arc::clone(&client.shard_manager));
+        data.insert::<StartTimeContainer>(Utc::now());
     }
 
     if let Err(why) = client.start().await {

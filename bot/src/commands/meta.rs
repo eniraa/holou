@@ -1,9 +1,11 @@
+use chrono::prelude::*;
 use poise::serenity_prelude as serenity;
 
+use crate::utils::format::*;
 use crate::utils::types::*;
 
 /// Commands for debugging and diagnostics.
-#[poise::command(slash_command, subcommands("ping", "kill"))]
+#[poise::command(slash_command, subcommands("ping", "kill", "uptime"))]
 pub async fn debug(_: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
@@ -31,6 +33,36 @@ async fn ping(ctx: Context<'_>) -> Result<(), Error> {
                     runner.latency.map_or(String::from("unknown"), |d| {
                         (d.subsec_micros() as f64 / 1000.0).to_string() + "ms"
                     })
+                )),
+        ),
+    )
+    .await?;
+    Ok(())
+}
+
+/// Get bot uptime.
+#[poise::command(slash_command)]
+async fn uptime(ctx: Context<'_>) -> Result<(), Error> {
+    let data = ctx.serenity_context().data.read().await;
+    let start_time = data
+        .get::<StartTimeContainer>()
+        .expect("Start time not found");
+
+    let uptime = Utc::now() - *start_time;
+
+    poise::send_reply(
+        ctx,
+        poise::CreateReply::default().embed(
+            serenity::CreateEmbed::default()
+                .title("Uptime")
+                .description(format!(
+                    "{}, {}, {}, {}\n*(Started on {} at {})*",
+                    plural("day", uptime.num_days()),
+                    plural("hour", uptime.num_hours() % 24),
+                    plural("minute", uptime.num_minutes() % 60),
+                    plural("second", uptime.num_seconds() % 60),
+                    timestamp(*start_time, TimestampType::ShortDate),
+                    timestamp(*start_time, TimestampType::ShortTime)
                 )),
         ),
     )
