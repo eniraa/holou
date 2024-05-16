@@ -1,0 +1,21 @@
+[package]
+name = "holou"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+poise = "0.6.1"
+serenity = { version = "0.12.1", default-features = false, features = [
+    "builder",
+    "cache",
+    "client",
+    "gateway",
+    "http",
+    "model",
+    "rustls_backend",
+] }
+tokio = { version = "1.37.0", features = [
+    "macros",
+    "rt-multi-thread",
+    "parking_lot",
+] }
