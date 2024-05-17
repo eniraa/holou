@@ -1,5 +1,5 @@
 [workspace]
 members = [
-    "bot"
+    "holou"
 ]
 resolver = "2"
