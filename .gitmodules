@@ -1,0 +1,3 @@
+[submodule "disboard/qhull"]
+	path = disboard/qhull
+	url = https://github.com/qhull/qhull.git
