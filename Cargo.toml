@@ -1,5 +1,3 @@
 [workspace]
-members = [
-    "holou"
-]
+members = ["disboard", "holou"]
 resolver = "2"
