@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-coordinates = "0.3.1"
+nalgebra = "0.32.6"
 num-traits = "0.2.19"
+qhull = "0.3.1"
 rand = "0.8.5"
 
 [dev-dependencies]

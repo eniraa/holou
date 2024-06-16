@@ -1,0 +1,229 @@
+use nalgebra::{ComplexField, Unit, Vector3};
+use num_traits::Float;
+use qhull::Qh;
+use rand::{
+    distributions::{uniform::SampleUniform, Uniform},
+    Rng,
+};
+
+/// A Voronoi cell.
+#[derive(Debug)]
+pub struct VoronoiCell<T> {
+    /// The center of the cell. On a unit sphere, this is the normal.
+    pub center: Vector3<T>,
+    /// The vertices of the cell, sorted counterclockwise.
+    pub vertices: Vec<Vector3<T>>,
+}
+
+/// Samples `n` points uniformly on a sphere of radius `r`.
+pub fn sample_sphere<T: Float + SampleUniform>(
+    n: usize,
+    r: T,
+    rng: &mut impl Rng,
+) -> Vec<Vector3<T>> {
+    let mut points = Vec::with_capacity(n);
+
+    for _ in 0..n {
+        let u = rng.sample(Uniform::from(T::zero()..T::one()));
+        let v = rng.sample(Uniform::from(T::zero()..T::one()));
+
+        let theta = T::from(2.0 * std::f64::consts::PI).unwrap() * u;
+        let phi = (T::from(2.0).unwrap() * v - T::from(1.0).unwrap()).acos();
+
+        let x = r * phi.sin() * theta.cos();
+        let y = r * phi.sin() * theta.sin();
+        let z = r * phi.cos();
+
+        points.push(Vector3::new(x, y, z));
+    }
+
+    points
+}
+
+/// Sorts vertices counterclockwise around the given axis.
+fn sort_vertices_ccw<T: Float + ComplexField + From<f64>>(
+    vertices: Vec<Vector3<T>>,
+    axis: Vector3<T>,
+) -> Vec<Vector3<T>> {
+    let e_z = Unit::new_normalize(axis);
+    let e_x = if e_z.dot(&Vector3::z()) > 0.99.into() {
+        Unit::new_normalize(e_z.cross(&Vector3::x()))
+    } else {
+        Unit::new_normalize(e_z.cross(&Vector3::z()))
+    };
+    let e_y = e_z.cross(&e_x);
+
+    let mut points = vertices
+        .iter()
+        .map(|&point| {
+            let p_perp = (point - e_z.into_inner() * point.dot(&e_z)).normalize();
+            let angle = p_perp.dot(&e_y).atan2(p_perp.dot(&e_x));
+            (angle, point)
+        })
+        .collect::<Vec<_>>();
+
+    points.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    points
+        .into_iter()
+        .map(|(_, point)| point)
+        .collect::<Vec<_>>()
+}
+
+/// Computes the Voronoi diagram of the given points.
+pub fn voronoi<T: Float + ComplexField + From<f64> + Into<f64>>(
+    points: Vec<Vector3<T>>,
+) -> Vec<VoronoiCell<T>> {
+    let qh = Qh::builder()
+        .compute(true)
+        .build_from_iter(points.iter().map(|v| [v.x.into(), v.y.into(), v.z.into()]))
+        .unwrap();
+    let mut cells = Vec::new();
+
+    for point in points.iter() {
+        let simplices = qh
+            .faces()
+            .filter(|f| {
+                f.vertices()
+                    .unwrap()
+                    .iter()
+                    .any(|v| v.point() == [point.x.into(), point.y.into(), point.z.into()])
+            })
+            .collect::<Vec<_>>();
+        let vertices = sort_vertices_ccw(
+            simplices
+                .iter()
+                .map(|s| {
+                    let normal = s.normal();
+                    Vector3::new(normal[0].into(), normal[1].into(), normal[2].into())
+                })
+                .collect::<Vec<_>>(),
+            *point,
+        );
+
+        cells.push(VoronoiCell {
+            center: *point,
+            vertices: vertices,
+        });
+    }
+
+    cells
+}
+
+#[cfg(test)]
+mod tests {
+    use approx::{assert_relative_eq, relative_eq};
+
+    use super::*;
+
+    #[test]
+    fn test_sample_sphere() {
+        let n = 1024;
+        let mut rng = rand::thread_rng();
+
+        for i in 1..=128 {
+            let r = i as f64 / 2.0;
+            let points = sample_sphere(n, r, &mut rng);
+
+            assert_eq!(points.len(), n);
+            for point in points.iter() {
+                let dist = point.norm();
+                assert_relative_eq!(dist, r, epsilon = f32::EPSILON as f64);
+            }
+        }
+    }
+
+    #[test]
+    fn test_voronoi() {
+        let phi = (1.0 + 5.0_f64.sqrt()) / 2.0;
+        let icosahedron = vec![
+            Vector3::new(phi, 1.0, 0.0),
+            Vector3::new(-phi, 1.0, 0.0),
+            Vector3::new(phi, -1.0, 0.0),
+            Vector3::new(-phi, -1.0, 0.0),
+            Vector3::new(1.0, 0.0, phi),
+            Vector3::new(1.0, 0.0, -phi),
+            Vector3::new(-1.0, 0.0, phi),
+            Vector3::new(-1.0, 0.0, -phi),
+            Vector3::new(0.0, phi, 1.0),
+            Vector3::new(0.0, -phi, 1.0),
+            Vector3::new(0.0, phi, -1.0),
+            Vector3::new(0.0, -phi, -1.0),
+        ]
+        .iter()
+        .map(Vector3::normalize)
+        .collect::<Vec<_>>();
+        let cells = voronoi(icosahedron.clone());
+
+        // check that they match
+        for point in icosahedron.iter() {
+            assert!(cells.iter().any(|cell| relative_eq!(cell.center, *point)));
+        }
+
+        for cell in cells.iter() {
+            assert!(icosahedron
+                .iter()
+                .any(|point| relative_eq!(*point, cell.center)));
+        }
+
+        let dodecahedron = vec![
+            Vector3::new(1.0, 1.0, 1.0),
+            Vector3::new(-1.0, 1.0, 1.0),
+            Vector3::new(1.0, -1.0, 1.0),
+            Vector3::new(-1.0, -1.0, 1.0),
+            Vector3::new(1.0, 1.0, -1.0),
+            Vector3::new(-1.0, 1.0, -1.0),
+            Vector3::new(1.0, -1.0, -1.0),
+            Vector3::new(-1.0, -1.0, -1.0),
+            Vector3::new(phi.recip(), phi, 0.0),
+            Vector3::new(-phi.recip(), phi, 0.0),
+            Vector3::new(phi.recip(), -phi, 0.0),
+            Vector3::new(-phi.recip(), -phi, 0.0),
+            Vector3::new(0.0, phi.recip(), phi),
+            Vector3::new(0.0, -phi.recip(), phi),
+            Vector3::new(0.0, phi.recip(), -phi),
+            Vector3::new(0.0, -phi.recip(), -phi),
+            Vector3::new(phi, 0.0, phi.recip()),
+            Vector3::new(-phi, 0.0, phi.recip()),
+            Vector3::new(phi, 0.0, -phi.recip()),
+            Vector3::new(-phi, 0.0, -phi.recip()),
+        ]
+        .iter()
+        .map(Vector3::normalize)
+        .collect::<Vec<_>>();
+
+        // check that they match
+        for vertex in dodecahedron.iter() {
+            assert!(cells
+                .iter()
+                .any(|cell| cell.vertices.iter().any(|v| relative_eq!(v, vertex))));
+        }
+
+        for cell in cells.iter() {
+            assert!(dodecahedron
+                .iter()
+                .any(|vertex| { cell.vertices.iter().any(|v| relative_eq!(*v, *vertex)) }));
+        }
+
+        // check that each face has correct vertices
+        for cell in cells.iter() {
+            assert_eq!(cell.vertices.len(), 5);
+            for vertex in cell.vertices.iter() {
+                assert_relative_eq!(
+                    (cell.center - vertex).norm(),
+                    (2.0 - 2.0 * (1.0 / 15.0 * (5.0 + 2.0 * f64::sqrt(5.0))).sqrt()).sqrt() // trust
+                );
+            }
+        }
+
+        // check that vertices are counterclockwise
+        for cell in cells.iter() {
+            for i in 0..cell.vertices.len() {
+                let v1 = cell.vertices[i];
+                let v2 = cell.vertices[(i + 1) % cell.vertices.len()];
+                let v3 = cell.vertices[(i + 2) % cell.vertices.len()];
+
+                assert_relative_eq!((v2 - v1).cross(&(v3 - v2)).normalize(), cell.center);
+            }
+        }
+    }
+}
