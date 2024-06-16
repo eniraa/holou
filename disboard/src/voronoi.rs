@@ -102,7 +102,7 @@ pub fn voronoi<T: Float + ComplexField + From<f64> + Into<f64>>(
 
         cells.push(VoronoiCell {
             center: *point,
-            vertices: vertices,
+            vertices,
         });
     }
 
