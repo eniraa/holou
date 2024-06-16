@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 nalgebra = "0.32.6"
 num-traits = "0.2.19"
-qhull = "0.3.1"
+qhull = { git = "https://github.com/eniraa/qhull-rs.git" }
 rand = "0.8.5"
 
 [dev-dependencies]

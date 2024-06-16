@@ -25,6 +25,9 @@ jobs:
             - 
                 name: Rustfmt
                 run: cargo fmt --all -- --check
+            -
+                name: Test
+                run: cargo test --verbose --all
     build:
         runs-on: ubuntu-latest
         permissions:
