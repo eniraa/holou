@@ -105,6 +105,7 @@ pub fn voronoi<T: Float + RealField + From<f64> + Into<f64>>(
     cells
 }
 
+/// Computes the centroid of a Voronoi cell.
 pub fn centroid<T: Float + RealField>(cell: VoronoiCell<T>) -> Vector3<T> {
     let mut centroid = Vector3::zeros();
     for i in 0..cell.vertices.len() {
@@ -115,6 +116,19 @@ pub fn centroid<T: Float + RealField>(cell: VoronoiCell<T>) -> Vector3<T> {
     }
 
     centroid.normalize()
+}
+
+/// Relaxes the given Voronoi cells via LLoyd's algorithm.
+pub fn relax<T: Float + RealField>(
+    cells: Vec<VoronoiCell<T>>,
+    weight: T,
+) -> Vec<Vector3<T>> {
+    let mut points = Vec::new();
+    for cell in cells.iter() {
+        points.push((centroid(cell.clone()) * weight + cell.center).normalize());
+    }
+
+    points
 }
 
 #[cfg(test)]
