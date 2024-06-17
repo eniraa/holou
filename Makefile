@@ -9,10 +9,10 @@ lint: fix
 	@cargo check
 	@cargo fmt --all -- --check
 	@cargo clippy --all-targets --all-features -- -D warnings
-build_release: lint
+build_release:
 	@echo "Building release: $(VERSION)"
 	@cargo build --release
-build_debug: lint
+build_debug:
 	@echo "Building debug"
 	@cargo build
 run: build_debug

@@ -119,10 +119,7 @@ pub fn centroid<T: Float + RealField>(cell: VoronoiCell<T>) -> Vector3<T> {
 }
 
 /// Relaxes the given Voronoi cells via LLoyd's algorithm.
-pub fn relax<T: Float + RealField>(
-    cells: Vec<VoronoiCell<T>>,
-    weight: T,
-) -> Vec<Vector3<T>> {
+pub fn relax<T: Float + RealField>(cells: Vec<VoronoiCell<T>>, weight: T) -> Vec<Vector3<T>> {
     let mut points = Vec::new();
     for cell in cells.iter() {
         points.push((centroid(cell.clone()) * weight + cell.center).normalize());
