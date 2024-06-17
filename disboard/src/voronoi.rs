@@ -1,4 +1,4 @@
-use nalgebra::{ComplexField, Unit, Vector3};
+use nalgebra::{RealField, Unit, Vector3};
 use num_traits::Float;
 use qhull::Qh;
 use rand::{
@@ -7,7 +7,7 @@ use rand::{
 };
 
 /// A Voronoi cell.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VoronoiCell<T> {
     /// The center of the cell. On a unit sphere, this is the normal.
     pub center: Vector3<T>,
@@ -16,11 +16,7 @@ pub struct VoronoiCell<T> {
 }
 
 /// Samples `n` points uniformly on a sphere of radius `r`.
-pub fn sample_sphere<T: Float + SampleUniform>(
-    n: usize,
-    r: T,
-    rng: &mut impl Rng,
-) -> Vec<Vector3<T>> {
+pub fn sample_sphere<T: Float + SampleUniform>(n: usize, rng: &mut impl Rng) -> Vec<Vector3<T>> {
     let mut points = Vec::with_capacity(n);
 
     for _ in 0..n {
@@ -30,9 +26,9 @@ pub fn sample_sphere<T: Float + SampleUniform>(
         let theta = T::from(2.0 * std::f64::consts::PI).unwrap() * u;
         let phi = (T::from(2.0).unwrap() * v - T::from(1.0).unwrap()).acos();
 
-        let x = r * phi.sin() * theta.cos();
-        let y = r * phi.sin() * theta.sin();
-        let z = r * phi.cos();
+        let x = phi.sin() * theta.cos();
+        let y = phi.sin() * theta.sin();
+        let z = phi.cos();
 
         points.push(Vector3::new(x, y, z));
     }
@@ -41,7 +37,7 @@ pub fn sample_sphere<T: Float + SampleUniform>(
 }
 
 /// Sorts vertices counterclockwise around the given axis.
-fn sort_vertices_ccw<T: Float + ComplexField + From<f64>>(
+fn sort_vertices_ccw<T: Float + RealField + From<f64>>(
     vertices: Vec<Vector3<T>>,
     axis: Vector3<T>,
 ) -> Vec<Vector3<T>> {
@@ -57,7 +53,7 @@ fn sort_vertices_ccw<T: Float + ComplexField + From<f64>>(
         .iter()
         .map(|&point| {
             let p_perp = (point - e_z.into_inner() * point.dot(&e_z)).normalize();
-            let angle = p_perp.dot(&e_y).atan2(p_perp.dot(&e_x));
+            let angle = RealField::atan2(p_perp.dot(&e_y), p_perp.dot(&e_x));
             (angle, point)
         })
         .collect::<Vec<_>>();
@@ -70,7 +66,7 @@ fn sort_vertices_ccw<T: Float + ComplexField + From<f64>>(
 }
 
 /// Computes the Voronoi diagram of the given points.
-pub fn voronoi<T: Float + ComplexField + From<f64> + Into<f64>>(
+pub fn voronoi<T: Float + RealField + From<f64> + Into<f64>>(
     points: Vec<Vector3<T>>,
 ) -> Vec<VoronoiCell<T>> {
     let qh = Qh::builder()
@@ -109,6 +105,18 @@ pub fn voronoi<T: Float + ComplexField + From<f64> + Into<f64>>(
     cells
 }
 
+pub fn centroid<T: Float + RealField>(cell: VoronoiCell<T>) -> Vector3<T> {
+    let mut centroid = Vector3::zeros();
+    for i in 0..cell.vertices.len() {
+        let v1 = cell.vertices[i];
+        let v2 = cell.vertices[(i + 1) % cell.vertices.len()];
+        let d: T = (v1 - v2).norm();
+        centroid += (v1 + v2) * d;
+    }
+
+    centroid.normalize()
+}
+
 #[cfg(test)]
 mod tests {
     use approx::{assert_relative_eq, relative_eq};
@@ -120,15 +128,12 @@ mod tests {
         let n = 1024;
         let mut rng = rand::thread_rng();
 
-        for i in 1..=128 {
-            let r = i as f64 / 2.0;
-            let points = sample_sphere(n, r, &mut rng);
+        let points = sample_sphere::<f64>(n, &mut rng);
 
-            assert_eq!(points.len(), n);
-            for point in points.iter() {
-                let dist = point.norm();
-                assert_relative_eq!(dist, r, epsilon = f32::EPSILON as f64);
-            }
+        assert_eq!(points.len(), n);
+        for point in points.iter() {
+            let dist = point.norm();
+            assert_relative_eq!(dist, 1.0, epsilon = f32::EPSILON as f64);
         }
     }
 
@@ -224,6 +229,34 @@ mod tests {
 
                 assert_relative_eq!((v2 - v1).cross(&(v3 - v2)).normalize(), cell.center);
             }
+        }
+    }
+
+    #[test]
+    fn test_centroid() {
+        let phi = (1.0 + 5.0_f64.sqrt()) / 2.0;
+        let icosahedron = vec![
+            Vector3::new(phi, 1.0, 0.0),
+            Vector3::new(-phi, 1.0, 0.0),
+            Vector3::new(phi, -1.0, 0.0),
+            Vector3::new(-phi, -1.0, 0.0),
+            Vector3::new(1.0, 0.0, phi),
+            Vector3::new(1.0, 0.0, -phi),
+            Vector3::new(-1.0, 0.0, phi),
+            Vector3::new(-1.0, 0.0, -phi),
+            Vector3::new(0.0, phi, 1.0),
+            Vector3::new(0.0, -phi, 1.0),
+            Vector3::new(0.0, phi, -1.0),
+            Vector3::new(0.0, -phi, -1.0),
+        ]
+        .iter()
+        .map(Vector3::normalize)
+        .collect::<Vec<_>>();
+        let cells = voronoi(icosahedron.clone());
+
+        for cell in cells.iter() {
+            let c = centroid(cell.clone());
+            assert_relative_eq!(c, cell.center);
         }
     }
 }
